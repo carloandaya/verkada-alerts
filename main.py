@@ -1,6 +1,6 @@
 import configparser
 import requests
-from datetime import datetime, timezone
+from datetime import datetime, timezone, time
 from zoneinfo import ZoneInfo
 import calendar
 import json
@@ -9,6 +9,11 @@ from shareplum import Office365
 from shareplum.site import Version
 import pandas as pd
 import io
+import smtplib
+from email.message import EmailMessage
+import logging
+
+logger = logging.getLogger(__name__)
 
 def get_site_status(config): 
     url = config['DEFAULT']['VerkadaURL']    
@@ -91,6 +96,25 @@ def get_open_close_columns(validation_day):
             return 16, 17 
 
 
+def send_alert_email(subject, message, config): 
+    msg = EmailMessage()
+    msg['Subject'] = subject
+    msg['From'] = config["DEFAULT"]["BotUsername"]
+    msg['To'] = config["DEFAULT"]["AlertRecipient"]
+    msg.set_content(message)
+
+
+    mailserver = smtplib.SMTP('smtp.office365.com',587)
+    mailserver.ehlo()
+    mailserver.starttls()
+    mailserver.login(config["DEFAULT"]["BotUsername"], config["DEFAULT"]["BotPassword"])
+    #Adding a newline before the body text fixes the missing message body
+    # mailserver.sendmail(config["DEFAULT"]["BotUsername"],'ca101098@mywirelessgroup.com','\nHello Carlo!')
+    mailserver.send_message(msg)
+    mailserver.quit()
+
+    logger.info(f'Alert sent with subject {subject}')
+
 
 def site_validation(verkadafile, schedulefile, validation_time, validation_day):
     skipped_locations = []
@@ -108,45 +132,57 @@ def site_validation(verkadafile, schedulefile, validation_time, validation_day):
         site_timezone = market_to_timezone(market_name)
 
         if site_timezone == '':
+            logger.info(f"{site["site_name"]} skipped for invalid timezone.")
             skipped_locations.append(site["site_name"])
             continue
 
         open_column, close_column = get_open_close_columns(validation_day)
         
+        open_time = ''
+        close_time = ''
         try: 
             open_time = datetime.strptime(siterow.iat[0, open_column], "%I:%M %p").time()
             close_time = datetime.strptime(siterow.iat[0,close_column], "%I:%M %p").time()
         except ValueError:
+            logger.info(f"{site["site_name"]} skipped for open/close time.")
             skipped_locations.append(site["site_name"]) 
             continue
-        except TypeError: 
-            open_time = siterow.iat[0, open_column]
-            close_time = siterow.iat[0, close_column]
+        except TypeError:
+            if not isinstance (open_time, time):
+                open_time = siterow.iat[0, open_column]
+            if not isinstance (close_time, time):
+                close_time = siterow.iat[0, close_column]
         
         site_local_time = validation_time.astimezone(ZoneInfo(site_timezone)).time()
 
-        print(f'{site["site_name"]} cpid {cpid}, site_state {site_state}, open time {open_time}, close time {close_time}, tz = {site_timezone}')
-        print(f'validation time {validation_time.time()}')
-        print(f'site local time {site_local_time}')
-        print(f'send alert {site_local_time > open_time and site_local_time < close_time and site_state == 'armed'}')
+        if site_local_time > open_time and site_local_time < close_time and site_state == 'armed':
+            logger.info(f"Closed store alert sent for {site["site_name"]}.")
+            msg_subject = f'Closed store alert for {site["site_name"]}'
+            msg_content = f'''{site["site_name"]} has an open time of {open_time} and a close time of {close_time} on {validation_day} 
+            in the {site_timezone} timezone. 
+            The system time is {validation_time.time()} and site time is {site_local_time}. The alarm state is {site_state}. 
+            The alarm state will be checked again in 15 minutes.'''
+            
+            send_alert_email(msg_subject, msg_content, config)
     
-    print(skipped_locations)
+    logger.warning(f'The following sites were skipped: {skipped_locations}')    
     
     
 
 if __name__ == "__main__":
     config = configparser.ConfigParser()
-    config.read('config.ini')
+    config.read('config.ini')    
+
+    logging.basicConfig(format='%(asctime)s %(message)s', filename='verkadaalerts.log', level=logging.INFO)
 
     # Get current time
     my_time = datetime.now(ZoneInfo('US/Pacific'))
     # Get weekday
     my_weekday = calendar.day_name[datetime.now().weekday()]
     
-    print(f"Time is {my_time}. Weekday is {my_weekday}")
+    logger.info(f"Time is {my_time} Pacific. Day of week is {my_weekday}")
 
-    site_list = get_site_status(config)
-    print(site_list)
+    site_list = get_site_status(config)    
     schedule_file = get_schedule_file(config)
     site_validation(site_list, schedule_file, my_time, my_weekday)
 
