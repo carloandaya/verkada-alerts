@@ -12,6 +12,7 @@ import io
 import smtplib
 from email.message import EmailMessage
 import logging
+import schedule
 
 logger = logging.getLogger(__name__)
 
@@ -167,14 +168,8 @@ def site_validation(verkadafile, schedulefile, validation_time, validation_day):
     
     logger.warning(f'The following sites were skipped: {skipped_locations}')    
     
-    
 
-if __name__ == "__main__":
-    config = configparser.ConfigParser()
-    config.read('config.ini')    
-
-    logging.basicConfig(format='%(asctime)s %(message)s', filename='verkadaalerts.log', level=logging.INFO)
-
+def validate(site_list, schedule_file):
     # Get current time
     my_time = datetime.now(ZoneInfo('US/Pacific'))
     # Get weekday
@@ -182,7 +177,19 @@ if __name__ == "__main__":
     
     logger.info(f"Time is {my_time} Pacific. Day of week is {my_weekday}")
 
-    site_list = get_site_status(config)    
-    schedule_file = get_schedule_file(config)
     site_validation(site_list, schedule_file, my_time, my_weekday)
 
+
+if __name__ == "__main__":
+    config = configparser.ConfigParser()
+    config.read('config.ini')    
+
+    logging.basicConfig(format='%(asctime)s %(message)s', filename='verkadaalerts.log', level=logging.INFO)
+
+    site_list = get_site_status(config)    
+    schedule_file = get_schedule_file(config)
+
+    schedule.every(15).minutes.do(validate, site_list=site_list, schedule_file=schedule_file)
+
+    while datetime.now().time() < time(22, 0):
+        schedule.run_pending()

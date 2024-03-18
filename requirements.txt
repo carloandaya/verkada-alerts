@@ -15,6 +15,7 @@ pytz==2024.1
 requests==2.31.0
 requests-ntlm==1.2.0
 requests-toolbelt==1.0.0
+schedule==1.2.1
 SharePlum==0.5.1
 six==1.16.0
 sspilib==0.1.0
