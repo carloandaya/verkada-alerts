@@ -169,13 +169,15 @@ def site_validation(verkadafile, schedulefile, validation_time, validation_day):
     logger.warning(f'The following sites were skipped: {skipped_locations}')    
     
 
-def validate(site_list, schedule_file):
+def validate(schedule_file):
     # Get current time
     my_time = datetime.now(ZoneInfo('US/Pacific'))
     # Get weekday
     my_weekday = calendar.day_name[datetime.now().weekday()]
     
     logger.info(f"Time is {my_time} Pacific. Day of week is {my_weekday}")
+
+    site_list = get_site_status(config)
 
     site_validation(site_list, schedule_file, my_time, my_weekday)
 
@@ -187,13 +189,12 @@ if __name__ == "__main__":
     logging.basicConfig(format='%(asctime)s %(message)s', filename='verkadaalerts.log', level=logging.INFO)
 
     logger.info("Program started.")
-
-    site_list = get_site_status(config)    
+    
     schedule_file = get_schedule_file(config)
 
-    validate(site_list, schedule_file)
+    validate(schedule_file)
     
-    schedule.every(15).minutes.do(validate, site_list=site_list, schedule_file=schedule_file)
+    schedule.every(15).minutes.do(validate, schedule_file=schedule_file)
 
     while datetime.now().time() < time(22, 0):
         schedule.run_pending()
