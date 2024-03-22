@@ -53,6 +53,8 @@ def market_to_timezone(marketname):
             return 'US/Pacific'
         case "CASAN Market": 
             return 'US/Pacific'
+        case "CODEN Market":
+            return 'US/Mountain'
         case "ILCHI Market": 
             return 'US/Central'
         case "MIDET Market": 
@@ -109,8 +111,6 @@ def send_alert_email(subject, message, config):
     mailserver.ehlo()
     mailserver.starttls()
     mailserver.login(config["DEFAULT"]["BotUsername"], config["DEFAULT"]["BotPassword"])
-    #Adding a newline before the body text fixes the missing message body
-    # mailserver.sendmail(config["DEFAULT"]["BotUsername"],'ca101098@mywirelessgroup.com','\nHello Carlo!')
     mailserver.send_message(msg)
     mailserver.quit()
 
@@ -169,7 +169,7 @@ def site_validation(verkadafile, schedulefile, validation_time, validation_day):
     logger.warning(f'The following sites were skipped: {skipped_locations}')    
     
 
-def validate(schedule_file):
+def validate(schedule_file, config):
     # Get current time
     my_time = datetime.now(ZoneInfo('US/Pacific'))
     # Get weekday
@@ -192,9 +192,9 @@ if __name__ == "__main__":
     
     schedule_file = get_schedule_file(config)
 
-    validate(schedule_file)
+    validate(schedule_file, config)
     
-    schedule.every(15).minutes.do(validate, schedule_file=schedule_file)
+    schedule.every(15).minutes.do(validate, schedule_file=schedule_file, config=config)
 
     while datetime.now().time() < time(22, 0):
         schedule.run_pending()
